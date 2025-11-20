@@ -1,0 +1,57 @@
+name: Daily mirror: update manifest.json
+
+# Запуск раз в сутки + ручной запуск
+on:
+  schedule:
+    - cron: '0 2 * * *'   # раз в сутки в 02:00 UTC (подкорректируй при желании)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch manifest from mirror
+        run: |
+          set -euo pipefail
+          URL="https://ams1.mirror.jellyfin.org/files/plugin/manifest.json"
+          OUT="manifest.json"
+          TMP="${OUT}.tmp"
+          echo "Downloading $URL ..."
+          if ! curl -sS -L -o "$TMP" "$URL"; then
+            echo "Failed to download $URL"
+            exit 1
+          fi
+          # Проверка валидности JSON (если нужно убрать, можно удалить)
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+          if ! jq empty "$TMP" >/dev/null 2>&1; then
+            echo "Downloaded file is not valid JSON"
+            rm -f "$TMP"
+            exit 1
+          fi
+          mv "$TMP" "$OUT"
+          echo "Saved to $OUT"
+
+      - name: Commit & push if changed
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          # если staged changes — закоммитить и запушить
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Daily mirror: update manifest.json ($(date -u +"%Y-%m-%d %H:%M:%S UTC"))"
+            git push
+            echo "Changes pushed"
+          fi
