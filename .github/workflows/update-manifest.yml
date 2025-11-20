@@ -1,4 +1,4 @@
-name: Daily mirror: update manifest.json
+name: Daily mirror update manifest.json
 
 # Запуск раз в сутки + ручной запуск
 on:
